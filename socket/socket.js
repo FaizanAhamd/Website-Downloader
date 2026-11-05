@@ -1,30 +1,54 @@
 var wget = require('../wget');
 
+var MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT_DOWNLOADS) || 5;
+var activeJobs = 0;
+var sockets = new Set();
+
 module.exports = (io) => {
   io.on('connection', function (socket) {
-    socket.on('request', function (data) {
-      if (!data || typeof data.token !== 'string' || !data.token) return;
-
-      // The handle returned by wget() is now stored on the socket. It never was
-      // before, so the cleanup below could never find a process to stop.
-      if (socket.job) {
-        socket.emit(data.token, { error: 'A download is already running on this connection.' });
-        return;
-      }
-
-      console.log('Request connection received %s', data.token);
-      socket.job = wget(socket, data, function () {
-        socket.job = null;
-      });
-    });
+    sockets.add(socket);
 
     socket.on('disconnect', function () {
-      console.log('User disconnected');
-      // Stop the wget process and remove partially downloaded files
+      sockets.delete(socket);
       if (socket.job) {
         socket.job.cancel();
         socket.job = null;
       }
     });
+
+    socket.on('error', function (err) {
+      console.error('socket error:', err && err.message);
+    });
+
+    socket.on('request', function (data) {
+      if (!data || typeof data.token !== 'string' || !data.token) return;
+
+      if (socket.job) {
+        socket.emit(data.token, { error: 'A download is already running on this connection.' });
+        return;
+      }
+
+      if (activeJobs >= MAX_CONCURRENT) {
+        socket.emit(data.token, { error: 'Too many downloads are running right now. Please try again in a moment.' });
+        return;
+      }
+
+      activeJobs++;
+      socket.emit(data.token, { progress: 'Starting' });
+
+      socket.job = wget(socket, data, function () {
+        socket.job = null;
+        activeJobs = Math.max(0, activeJobs - 1);
+      });
+    });
   });
+
+  return {
+    cancelAll: function () {
+      sockets.forEach(function (s) {
+        if (s.job) { s.job.cancel(); s.job = null; }
+      });
+      activeJobs = 0;
+    }
+  };
 };

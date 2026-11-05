@@ -24,108 +24,131 @@
 
   gtag('config', 'UA-120895783-4');
 </script>
-
 <script>
   var numberOfFiles = 0;
-  const downloadWebsite = document.getElementsByClassName('btn-success')[0];
-  const downloadBtn = document.getElementById('download');
-  const websiteInput = document.getElementById('website');
-  const progressBar = document.getElementById('progress');
-  const filesLine = document.getElementById('nFilesP');
-  const filesCount = document.getElementById('nFiles');
-  // Looked up once. This used to be declared inside one branch of the handler
-  // while the other branches relied on the browser's implicit window global.
-  const log = document.getElementById('log');
+  var sessionToken = '';
+  var downloadWebsite = document.getElementsByClassName('btn-success')[0];
+  var downloadBtn = document.getElementById('download');
+  var websiteInput = document.getElementById('website');
+  var progressBar = document.getElementById('progress');
+  var filesLine = document.getElementById('nFilesP');
+  var filesCount = document.getElementById('nFiles');
+  var log = document.getElementById('log');
+  var connStatus = document.getElementById('connStatus');
 
-  // connect to current socket.io server
-  var socket = io.connect(document.URL);
-  if(!localStorage['token'])
-  localStorage['token']=generateToken(20);
-
-  // wait for events for this token
-  socket.on(localStorage['token'],(event)=>{
-  console.log(event)
-
-  // The server now says so when a download fails, instead of reporting an
-  // empty archive as a finished download.
-  if(event.error)
-  {
-       progressBar.hidden=true;
-       log.textContent='';
-       const failure=document.createElement('strong');
-       failure.style.color='#c0392b';
-       failure.textContent=event.error;
-       log.appendChild(failure);
-       downloadBtn.disabled=false;
-       return;
+  // Safe storage: falls back to an in-memory token if localStorage is blocked.
+  function getToken() {
+    try {
+      var t = localStorage.getItem('token');
+      if (!t) { t = generateToken(20); localStorage.setItem('token', t); }
+      return t;
+    } catch (e) {
+      if (!sessionToken) sessionToken = generateToken(20);
+      return sessionToken;
+    }
   }
 
-  progressBar.hidden=false;
-  if(event.progress=="Converting")
-  {
-    log.textContent='100%! Compressing your website...'
-
+  function showConnecting() {
+    if (!connStatus) return;
+    connStatus.hidden = false;
+    connStatus.textContent = 'Connecting to server…';
+    downloadBtn.disabled = true;
   }
-   else if(event.progress=="Completed")
-   {
-        progressBar.hidden=true;
-        log.textContent='Compressing completed successfully !'
-        downloadWebsite.style.display=''
-        downloadWebsite.onclick=function()
-        {
-         window.location='/sites/'+event.file+".zip";
-        }
-        downloadBtn.disabled=false;
+  function showConnected() {
+    if (!connStatus) return;
+    connStatus.hidden = true;
+    downloadBtn.disabled = false;
+  }
+  function showDisconnected() {
+    if (!connStatus) return;
+    connStatus.hidden = false;
+    connStatus.textContent = 'Connection lost. Retrying…';
+    downloadBtn.disabled = true;
+  }
 
-   }
-   else
-   {
-        if(event.progress.includes('200 OK'))
-        {
-            numberOfFiles++;
-        }
-        filesLine.hidden=false;
-        filesCount.textContent=numberOfFiles
-        // textContent, not innerHTML: this text comes from the site being
-        // downloaded and should never be parsed as markup.
-        log.textContent=event.progress
-   }
-  })
+  var socket = io.connect(document.URL, { reconnection: true });
+  socket.on('connect', showConnected);
+  socket.on('connect_error', showDisconnected);
+  socket.on('disconnect', showDisconnected);
+  showConnecting();
 
-  // Download a website on click
-   function startDownload()
-   {
-        var website = websiteInput.value
-        if(!website.trim()) return;
-        console.log("Now downloading the website ... %s",website)
-        numberOfFiles=0;
-        filesCount.textContent='0';
-        log.textContent='';
-        downloadWebsite.style.display='none';
-        downloadBtn.disabled=true;
-        socket.emit('request', { token: localStorage['token'] , website});
-   }
-   downloadBtn.onclick=startDownload;
-   // Pressing Enter used to submit the form to /search, which does not exist
-   // and returned a 404 page.
-   document.getElementById('downloadForm').addEventListener('submit',(e)=>{
-        e.preventDefault();
-        startDownload();
-   });
+  // Reliable file counting: wget prints one line containing ' -> "' per saved
+  // file. We buffer partial lines across socket chunks so split lines are not
+  // miscounted (the old "200 OK" string search was unreliable).
+  var lineBuf = '';
+  function countSavedFiles(chunk) {
+    lineBuf += chunk;
+    var lines = lineBuf.split('\n');
+    lineBuf = lines.pop();
+    var n = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf(' -> "') !== -1) n++;
+    }
+    return n;
+  }
 
+  socket.on(getToken(), function (event) {
+    if (event && event.error) {
+      progressBar.hidden = true;
+      log.textContent = '';
+      var failure = document.createElement('strong');
+      failure.style.color = '#c0392b';
+      failure.textContent = event.error;
+      log.appendChild(failure);
+      downloadBtn.disabled = false;
+      return;
+    }
 
+    progressBar.hidden = false;
 
+    if (event.progress === 'Starting') {
+      filesLine.hidden = true;
+      log.textContent = 'Starting download…';
+    } else if (event.progress === 'Converting') {
+      log.textContent = '100%! Compressing your website...';
+    } else if (event.progress === 'Completed') {
+      progressBar.hidden = true;
+      log.textContent = 'Compressing completed successfully !';
+      if (typeof event.files === 'number') filesCount.textContent = event.files;
+      downloadWebsite.style.display = '';
+      downloadWebsite.onclick = function () {
+        window.location = '/sites/' + event.file + '.zip';
+      };
+      downloadBtn.disabled = false;
+    } else {
+      numberOfFiles += countSavedFiles(event.progress);
+      filesLine.hidden = false;
+      filesCount.textContent = numberOfFiles;
+      log.textContent = event.progress;
+    }
+  });
 
+  function startDownload() {
+    var website = websiteInput.value;
+    if (!website.trim()) return;
+    numberOfFiles = 0;
+    filesCount.textContent = '0';
+    log.textContent = '';
+    downloadWebsite.style.display = 'none';
+    downloadBtn.disabled = true;
+    socket.emit('request', { token: getToken(), website: website });
+  }
+  downloadBtn.onclick = startDownload;
 
-  // Generate token for each user for the first time.
+  document.getElementById('downloadForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    startDownload();
+  });
+
   function generateToken(n) {
     var chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     var token = '';
-    for(var i = 0; i < n; i++) {
-        token += chars[Math.floor(Math.random() * chars.length)];
+    for (var i = 0; i < n; i++) {
+      token += chars[Math.floor(Math.random() * chars.length)];
     }
     return token;
-}
+  }
+</script>
 </script>
 
 

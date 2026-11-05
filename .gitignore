@@ -32,3 +32,12 @@ downloads
 
 # Archives generated for users
 public/sites/*.zip
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS junk
+.DS_Store
+Thumbs.db
