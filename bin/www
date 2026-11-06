@@ -7,7 +7,6 @@
 var app = require('../app');
 var debug = require('debug')('website-downloader:server');
 var http = require('http');
-var archiver = require('../archiver');
 
 /**
  * Get port from environment and store in Express.
@@ -33,8 +32,6 @@ var socketModule = require('../socket/socket')(io);
 server.listen(port, onListening);
 server.on('error', onError);
 
-// Opportunistic cleanup of expired archives at boot.
-archiver.sweep();
 
 /**
  * Graceful shutdown.

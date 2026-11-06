@@ -20,6 +20,13 @@ module.exports = (io) => {
       console.error('socket error:', err && err.message);
     });
 
+    socket.on('cancel', function () {
+      if (socket.job) {
+        socket.job.cancel();
+        socket.job = null;
+      }
+    });
+
     socket.on('request', function (data) {
       if (!data || typeof data.token !== 'string' || !data.token) return;
 

@@ -1,17 +1,19 @@
 var archiver = require('archiver');
 var fs = require('fs');
 var path = require('path');
+var config = require('../config');
 
-var SITES_DIR = path.join(__dirname, '..', 'public', 'sites');
-var TTL_MS = (Number(process.env.DOWNLOAD_ZIP_TTL_HOURS) || 24) * 3600 * 1000;
+var SITES_DIR = config.download.archiveDir;
+var TTL_MS = config.download.zipTtlHours * 3600 * 1000;
 
 /**
- * Zips sourceDir into public/sites/<zipName>.zip and reports the outcome.
+ * Zips sourceDir into <archiveDir>/<zipName>.zip and reports the outcome.
+ * - Archives are written to a private directory, never public/.
  * - Failures remove partial files and never take the process down.
  * - Returns a control handle with abort() so cancellation can interrupt archiving.
- * - Old ZIPs are swept opportunistically (expiry policy).
+ * - Old ZIPs are swept opportunistically (expiry policy, default 24h).
  */
-module.exports = (sourceDir, zipName, opts, callback) => {
+module.exports = function (sourceDir, zipName, opts, callback) {
   if (typeof opts === 'function') { callback = opts; opts = {}; }
   opts = opts || {};
 
@@ -25,7 +27,6 @@ module.exports = (sourceDir, zipName, opts, callback) => {
     settled = true;
     if (err && output) {
       try { output.destroy(); } catch (e) {}
-      // Never leave a half-written ZIP in a public directory.
       try { fs.unlinkSync(zipPath); } catch (e) {}
     }
     callback(err, zipName, info);
@@ -43,7 +44,10 @@ module.exports = (sourceDir, zipName, opts, callback) => {
 
   output.on('close', function () {
     console.log(archive.pointer() + ' total bytes written to ' + zipPath);
-    finish(null, { fileCount: opts.fileCount || countFilesSync(sourceDir), bytes: archive.pointer() });
+    finish(null, {
+      fileCount: opts.fileCount || countFilesSync(sourceDir),
+      bytes: archive.pointer(),
+    });
   });
 
   output.on('error', function (err) { finish(err); });
@@ -58,7 +62,7 @@ module.exports = (sourceDir, zipName, opts, callback) => {
   archive.directory(sourceDir, false);
   archive.finalize();
 
-  sweepOldZips(); // opportunistic retention
+  sweepOldZips();
 
   return {
     abort: function () {
@@ -66,7 +70,7 @@ module.exports = (sourceDir, zipName, opts, callback) => {
       try { if (output) output.destroy(); } catch (e) {}
       try { if (archive && archive.abort) archive.abort(); } catch (e) {}
       finish(new Error('Archiving was cancelled.'));
-    }
+    },
   };
 };
 
@@ -94,7 +98,9 @@ function sweepOldZips() {
       fs.stat(fp, function (e, st) {
         if (e) return;
         if (now - st.mtimeMs > TTL_MS) {
-          fs.unlink(fp, function () { console.log('Expired zip removed: ' + n); });
+          fs.unlink(fp, function () {
+            console.log('Expired zip removed: ' + n);
+          });
         }
       });
     });

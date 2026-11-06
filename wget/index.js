@@ -228,7 +228,7 @@ module.exports = (socket, data, onFinished) => {
         if (err) {
           send({ error: 'The site downloaded but could not be compressed: ' + err.message });
         } else {
-          send({ progress: 'Completed', file: name, files: (info && info.fileCount) || fileCount });
+          send({ progress: 'Completed', file: name + '.zip', files: (info && info.fileCount) || fileCount });
         }
         done();
       });

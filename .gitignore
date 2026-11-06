@@ -24,17 +24,22 @@ coverage
 build/Release
 
 # Dependency directory
-# https://docs.npmjs.com/misc/faq#should-i-check-my-node-modules-folder-into-git
 node_modules
 
 # Working directory for in-progress downloads
 downloads
 
-# Archives generated for users
+# Private archive storage (never commit generated ZIPs)
+private/archives
+
+# Public sites dir retained only for .gitkeep legacy
 public/sites/*.zip
 
-# Environment
+# Environment secrets (never commit)
 .env
+.env.local
+.env.production
+.env.development
 .env.*
 !.env.example
 
