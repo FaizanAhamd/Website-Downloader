@@ -71,6 +71,22 @@ function isBlockedHost(hostname) {
   return false;
 }
 
+
+/** Detect blocked (private/link-local/loopback/metadata) IPs appearing in
+ *  Wget's output while it resolves/connects — this covers redirect destinations
+ *  that wget follows, not just the initial host. */
+function findBlockedIpInOutput(text) {
+  const ipRe = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+  let m;
+  while ((m = ipRe.exec(text)) !== null) {
+    if (isBlockedHost(m[0])) return m[0];
+  }
+  const v6Re = /\b(::1|::|f[cd][0-9a-f]{2}:[0-9a-f:]+|fe[89ab][0-9a-f]:[0-9a-f:]+)\b/i;
+  const m6 = v6Re.exec(text);
+  if (m6) return m6[0];
+  return null;
+}
+
 async function assertPublicHost(hostname) {
   if (isBlockedHost(hostname)) return false;
   let records;
@@ -156,17 +172,22 @@ module.exports = (socket, data, onFinished) => {
       } catch (err) { /* ignore */ }
     }, WATCHDOG_MS);
 
-    child.stdout.on('data', (chunk) => {
+    const onWgetData = (chunk) => {
       const text = chunk.toString();
       stderrTail = stderrTail.concat(text.split('\n')).slice(-60);
+      const blockedIp = findBlockedIpInOutput(text);
+      if (blockedIp) {
+        if (!settled) {
+          child.kill();
+          fail('Download redirected to a blocked private/internal address (' + blockedIp + ') and was stopped.');
+        }
+        return;
+      }
       send({ progress: text });
-    });
+    };
+    child.stdout.on('data', onWgetData);
 
-    child.stderr.on('data', (chunk) => {
-      const text = chunk.toString();
-      stderrTail = stderrTail.concat(text.split('\n')).slice(-60);
-      send({ progress: text });
-    });
+    child.stderr.on('data', onWgetData);
 
     child.on('error', (err) => {
       if (err.code === 'ENOENT') {
@@ -303,3 +324,8 @@ function removeJobDir(directory) {
     if (err) console.error('Could not clean up ' + resolved + ': ' + err.message);
   });
 }
+
+// Re-export helpers for reuse (e.g. the worker validates synchronously).
+module.exports.isBlockedHost = isBlockedHost;
+module.exports.findBlockedIpInOutput = findBlockedIpInOutput;
+module.exports.parseTarget = parseTarget;

@@ -6,7 +6,8 @@
   "author": "Faizan Ahmad",
   "scripts": {
     "start": "cross-env NODE_ENV=production node ./bin/www",
-    "dev": "cross-env NODE_ENV=development node ./bin/www"
+    "dev": "cross-env NODE_ENV=development node ./bin/www",
+    "test": "node --test"
   },
   "dependencies": {
     "archiver": "^3.1.1",
@@ -14,10 +15,13 @@
     "debug": "^2.6.9",
     "dotenv": "^16.4.5",
     "express": "~4.22.3",
-    "hbs": "~4.2.0",
+    "hbs": "4.4.0",
     "http-errors": "^2.0.0",
     "morgan": "^1.10.0",
     "socket.io": "^4.8.4"
+  },
+  "overrides": {
+    "handlebars": "4.7.10"
   },
   "engines": {
     "node": ">=18"

@@ -4,6 +4,9 @@
  * Module dependencies.
  */
 
+// Load .env (local development) before requiring config-dependent modules.
+try { require('dotenv').config(); } catch (e) { /* dotenv is optional */ }
+
 var app = require('../app');
 var debug = require('debug')('website-downloader:server');
 var http = require('http');
@@ -31,7 +34,6 @@ var socketModule = require('../socket/socket')(io);
 
 server.listen(port, onListening);
 server.on('error', onError);
-
 
 /**
  * Graceful shutdown.

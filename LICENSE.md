@@ -1,6 +1,7 @@
 The MIT License (MIT)
 
-Copyright (c) 2026 faizan Ahamad
+Copyright (c) 2019 Ahmed Ibrhim (original Website Downloader author)
+Copyright (c) 2026 Faizan Ahmad (current maintainer)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
