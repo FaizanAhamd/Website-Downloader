@@ -3,7 +3,6 @@
 **Product owner and maintainer:** Faizan Ahmad
 **Contact:** faizanraki42@gmail.com
 **GitHub:** https://github.com/FaizanAhamd/Website-Downloader
-**Original author:** Ahmed Ibrhim (2019) — see `LICENSE.md`
 
 Mirror publicly accessible static website content (HTML, CSS, images and JavaScript files) and download the collected files as a single ZIP archive.
 
